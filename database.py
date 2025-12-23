@@ -168,6 +168,9 @@ def get_or_create_user(telegram_id: int, username: str = None, first_name: str =
             if update_needed:
                 session.commit()
                 logger.info(f"Обновлены данные пользователя {telegram_id}")
+            
+            # Обновляем объект, чтобы получить актуальные данные
+            session.refresh(user)
         else:
             # Создаем нового пользователя
             user = User(
@@ -175,14 +178,32 @@ def get_or_create_user(telegram_id: int, username: str = None, first_name: str =
                 username=username,
                 first_name=first_name,
                 last_name=last_name,
-                group_name=None,  # НИКАКОЙ ГРУППЫ ПО УМОЛЧАНИЮ
+                group_name=None,
                 created_at=datetime.now()
             )
             session.add(user)
             session.commit()
+            session.refresh(user)  # Обновляем, чтобы получить ID
             logger.info(f"Создан новый пользователь {telegram_id}")
         
-        return user
+        # Создаем новый объект с теми же данными, но без привязки к сессии
+        user_data = {
+            'id': user.id,
+            'telegram_id': user.telegram_id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'group_name': user.group_name,
+            'is_admin': user.is_admin,
+            'created_at': user.created_at,
+            'notify_week': user.notify_week,
+            'notify_day': user.notify_day,
+            'notify_hour': user.notify_hour
+        }
+        
+        # Создаем новый объект User с теми же данными
+        detached_user = User(**user_data)
+        return detached_user
         
     except Exception as e:
         logger.error(f"Ошибка в get_or_create_user для {telegram_id}: {e}")
@@ -215,11 +236,29 @@ def set_user_group(telegram_id, group_name):
 def get_user_by_telegram_id(telegram_id):
     """
     Получает пользователя по его Telegram ID
+    Возвращает открепленный объект User
     """
     session = Session()
     try:
         user = session.query(User).filter(User.telegram_id == telegram_id).first()
-        return user
+        if user:
+            # Создаем новый объект с теми же данными, но без привязки к сессии
+            user_data = {
+                'id': user.id,
+                'telegram_id': user.telegram_id,
+                'username': user.username,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'group_name': user.group_name,
+                'is_admin': user.is_admin,
+                'created_at': user.created_at,
+                'notify_week': user.notify_week,
+                'notify_day': user.notify_day,
+                'notify_hour': user.notify_hour
+            }
+            detached_user = User(**user_data)
+            return detached_user
+        return None
     finally:
         session.close()
 
