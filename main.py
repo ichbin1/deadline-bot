@@ -339,25 +339,6 @@ async def debug_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
-async def test_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Тест отправки напоминания"""
-    user_id = update.effective_user.id
-    try:
-        from reminders import DeadlineReminder
-        reminder = DeadlineReminder(context.bot)
-        
-        # Создаем тестовый дедлайн
-        test_time = datetime.now() + timedelta(minutes=16)  # Через 16 минут
-        
-        await update.message.reply_text(
-            f"Тест напоминаний:\n"
-            f"Дедлайн установлен на: {test_time.strftime('%d.%m.%Y %H:%M')}\n"
-            f"Проверьте напоминание через 1 минуту."
-        )
-        
-    except Exception as e:
-        await update.message.reply_text(f"Ошибка: {e}")
-
 async def test_notification_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Тестовая команда для проверки уведомлений
@@ -408,80 +389,6 @@ async def test_notification_command(update: Update, context: ContextTypes.DEFAUL
         await update.message.reply_text(
             f"❌ Ошибка при тестировании:\n{e}"
         )
-
-async def force_check_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Принудительная проверка напоминаний
-    """
-    try:
-        from reminders import DeadlineReminder
-        
-        reminder = DeadlineReminder(context.bot)
-        
-        await update.message.reply_text(
-            "🔄 Запускаю принудительную проверку напоминаний..."
-        )
-        
-        await reminder.check_and_send_reminders()
-        
-        await update.message.reply_text(
-            "✅ Проверка напоминаний завершена!\n"
-            "Проверьте логи для подробностей."
-        )
-        
-    except Exception as e:
-        logger.error(f"Ошибка при принудительной проверке: {e}")
-        await update.message.reply_text(f"❌ Ошибка: {e}")
-
-async def test_reminder_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Тестирует логику напоминаний
-    """
-    from datetime import datetime, timedelta
-    import pytz
-    
-    moscow_tz = pytz.timezone('Europe/Moscow')
-    now = datetime.now(moscow_tz)
-    
-    message = "🔧 **Тест логики напоминаний**\n\n"
-    
-    # Создаем тестовые временные точки
-    test_times = [
-        ("Через 7 дней ровно", now + timedelta(days=7)),
-        ("Через 7 дней - 1 минута", now + timedelta(days=7) - timedelta(minutes=1)),
-        ("Через 7 дней + 1 минута", now + timedelta(days=7) + timedelta(minutes=1)),
-        ("Через 1 день ровно", now + timedelta(days=1)),
-        ("Через 1 день - 1 минута", now + timedelta(days=1) - timedelta(minutes=1)),
-        ("Через 1 день + 1 минута", now + timedelta(days=1) + timedelta(minutes=1)),
-        ("Через 1 час ровно", now + timedelta(hours=1)),
-        ("Через 1 час - 1 минута", now + timedelta(hours=1) - timedelta(minutes=1)),
-        ("Через 1 час + 1 минута", now + timedelta(hours=1) + timedelta(minutes=1)),
-    ]
-    
-    for name, test_time in test_times:
-        time_left = test_time - now
-        
-        # Проверяем условия
-        week_min = timedelta(days=7) - timedelta(minutes=5)
-        week_max = timedelta(days=7)
-        
-        day_min = timedelta(days=1) - timedelta(minutes=5)
-        day_max = timedelta(days=1)
-        
-        hour_min = timedelta(hours=1) - timedelta(minutes=5)
-        hour_max = timedelta(hours=1)
-        
-        week_ok = week_min < time_left <= week_max
-        day_ok = day_min < time_left <= day_max
-        hour_ok = hour_min < time_left <= hour_max
-        
-        message += f"{name}:\n"
-        message += f"  Осталось: {time_left}\n"
-        message += f"  За неделю: {'✅' if week_ok else '❌'}\n"
-        message += f"  За день: {'✅' if day_ok else '❌'}\n"
-        message += f"  За час: {'✅' if hour_ok else '❌'}\n\n"
-    
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
 async def create_test_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -1536,11 +1443,6 @@ def main():
     application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CommandHandler("debug", debug_command))
     application.add_handler(CommandHandler("debug_reminders", debug_reminders))
-    application.add_handler(CommandHandler("test_reminder", test_reminder))
-    application.add_handler(CommandHandler("test_notify", test_notification_command))
-    application.add_handler(CommandHandler("force_check", force_check_reminders))
-    application.add_handler(CommandHandler("test_reminder_logic", test_reminder_logic))
-    application.add_handler(CommandHandler("test_deadline", create_test_deadline))
 
     # ConversationHandler для установки группы
     group_conv_handler = ConversationHandler(
@@ -1653,5 +1555,14 @@ def main():
 
 # ========== ТОЧКА ВХОДА ==========
 
+import os
+
 if __name__ == "__main__":
-    main()
+    # Для локального тестирования
+    if os.environ.get('PYTHONANYWHERE'):
+        # Для продакшена - просто запускаем
+        application.run_polling()
+    else:
+        # Локально - с логированием
+        print("🚀 Бот запускается локально...")
+        main()
