@@ -33,7 +33,6 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.now)
     notify_week = Column(Boolean, default=True)
     notify_day = Column(Boolean, default=True)
-    notify_hour = Column(Boolean, default=True)
     
     # Связи с другими таблицами
     deadlines = relationship("Deadline", back_populates="user")
@@ -57,7 +56,6 @@ class Deadline(Base):
     # Флаги напоминаний
     reminded_week = Column(Boolean, default=False)
     reminded_day = Column(Boolean, default=False)
-    reminded_hour = Column(Boolean, default=False)
     
     # Связь с пользователем
     user = relationship("User", back_populates="deadlines")
@@ -96,7 +94,6 @@ class GroupDeadline(Base):
     # Флаги напоминаний
     reminded_week = Column(Boolean, default=False)
     reminded_day = Column(Boolean, default=False)
-    reminded_hour = Column(Boolean, default=False)
     
     # Связь с создателем
     creator = relationship("User", back_populates="group_deadlines")
@@ -198,7 +195,6 @@ def get_or_create_user(telegram_id: int, username: str = None, first_name: str =
             'created_at': user.created_at,
             'notify_week': user.notify_week,
             'notify_day': user.notify_day,
-            'notify_hour': user.notify_hour
         }
         
         # Создаем новый объект User с теми же данными
@@ -254,7 +250,6 @@ def get_user_by_telegram_id(telegram_id):
                 'created_at': user.created_at,
                 'notify_week': user.notify_week,
                 'notify_day': user.notify_day,
-                'notify_hour': user.notify_hour
             }
             detached_user = User(**user_data)
             return detached_user

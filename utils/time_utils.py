@@ -145,37 +145,25 @@ class TimeManager:
             return f"{minutes} минут"
     
     @staticmethod
-    def is_in_reminder_window(deadline_dt: datetime, reminder_type: str, window_minutes: int = 5) -> bool:
+    def is_in_reminder_window(deadline_db, reminder_type):
         """
-        Проверяет, находится ли дедлайн в окне напоминания
-        
-        Args:
-            deadline_dt: Время дедлайна
-            reminder_type: "week", "day" или "hour"
-            window_minutes: Окно в минутах
-        
-        Returns:
-            True если нужно отправить напоминание
+        Проверяет, находится ли дедлайн в окне для напоминания
+        deadline_db: datetime из базы данных (в UTC)
+        reminder_type: "week" или "day"
         """
+        deadline_moscow = TimeManager.from_db_to_moscow(deadline_db)
         now = TimeManager.now()
+        time_left = deadline_moscow - now
         
-        # Приводим оба времени к московскому поясу
-        if deadline_dt.tzinfo is None:
-            deadline_dt = TimeManager.from_db_to_moscow(deadline_dt)
-        
-        time_left = deadline_dt - now
-        
-        # Определяем целевое время для напоминания
         if reminder_type == "week":
+            # Проверка за неделю (7 дней ± 6 часов, т.к. проверка каждые 6 часов)
             target = timedelta(days=7)
+            window = timedelta(hours=6)  # Увеличили окно для проверки каждые 6 часов
+            return (target - window) <= time_left <= (target + window)
         elif reminder_type == "day":
+            # Проверка за день (1 день ± 6 часов)
             target = timedelta(days=1)
-        elif reminder_type == "hour":
-            target = timedelta(hours=1)
-        else:
-            return False
+            window = timedelta(hours=6)
+            return (target - window) <= time_left <= (target + window)
         
-        window = timedelta(minutes=window_minutes)
-        
-        # Проверяем двустороннее окно
-        return (target - window) <= time_left <= (target + window)
+        return False

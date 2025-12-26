@@ -203,7 +203,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Я буду присылать напоминания:
 • За неделю до дедлайна
 • За день до дедлайна
-• За час до дедлайна
 
 **📅 Формат даты:**
 При добавлении дедлайна указывай дату в формате:
@@ -999,7 +998,6 @@ async def show_notification_settings(update: Update, context: ContextTypes.DEFAU
     settings = {
         "notify_week": user.notify_week,
         "notify_day": user.notify_day,
-        "notify_hour": user.notify_hour
     }
     
     await update.message.reply_text(
@@ -1031,22 +1029,15 @@ async def handle_notification_settings(query, data, user_id):
             session.commit()
             await query.answer(f"Напоминания за день: {'включены' if user.notify_day else 'выключены'}", show_alert=False)
         
-        elif data == "toggle_hour":
-            user.notify_hour = not user.notify_hour
-            session.commit()
-            await query.answer(f"Напоминания за час: {'включены' if user.notify_hour else 'выключены'}", show_alert=False)
-        
         elif data == "enable_all":
             user.notify_week = True
             user.notify_day = True
-            user.notify_hour = True
             session.commit()
             await query.answer("Все напоминания включены!", show_alert=True)
         
         elif data == "disable_all":
             user.notify_week = False
             user.notify_day = False
-            user.notify_hour = False
             session.commit()
             await query.answer("Все напоминания выключены!", show_alert=True)
         
@@ -1065,8 +1056,7 @@ async def handle_notification_settings(query, data, user_id):
         # Обновляем клавиатуру с новыми состояниями
         settings = {
             "notify_week": user.notify_week,
-            "notify_day": user.notify_day,
-            "notify_hour": user.notify_hour
+            "notify_day": user.notify_day
         }
         keyboard = kb.get_notification_settings_keyboard(settings)
         await query.edit_message_reply_markup(reply_markup=keyboard)
@@ -1428,11 +1418,11 @@ def main():
     # Запускаем проверку каждую минуту
     job_queue.run_repeating(
         callback=check_reminders_job,
-        interval=60,  # 60 секунд = 1 минута
+        interval=21600,  # 60 секунд = 1 минута
         first=10       # Первый запуск через 10 секунд
     )
     
-    logger.info("✅ Планировщик напоминаний запущен (интервал: 1 минута)")
+    logger.info("✅ Планировщик напоминаний запущен (интервал: 6 часов)")
     
     
     # ========== РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ ==========

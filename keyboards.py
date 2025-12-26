@@ -220,7 +220,6 @@ def get_notification_settings_keyboard(current_settings):
     # Получаем текущие значения или значения по умолчанию
     week = "✅" if current_settings.get("notify_week", True) else "❌"
     day = "✅" if current_settings.get("notify_day", True) else "❌"
-    hour = "✅" if current_settings.get("notify_hour", True) else "❌"
     
     keyboard = [
         [
@@ -228,11 +227,10 @@ def get_notification_settings_keyboard(current_settings):
             InlineKeyboardButton(f"{day} За день", callback_data="toggle_day")
         ],
         [
-            InlineKeyboardButton(f"{hour} За час", callback_data="toggle_hour"),
-            InlineKeyboardButton("✅ Все", callback_data="enable_all")
+            InlineKeyboardButton("✅ Все", callback_data="enable_all"),
+            InlineKeyboardButton("❌ Никакие", callback_data="disable_all")
         ],
         [
-            InlineKeyboardButton("❌ Никакие", callback_data="disable_all"),
             InlineKeyboardButton("💾 Сохранить", callback_data="save_notifications")
         ],
         [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_settings")]
