@@ -29,7 +29,7 @@ class DeadlineReminder:
         logger.info("✅ Проверка напоминаний завершена")
     
     async def check_personal_deadlines(self):
-    """Проверяет личные дедлайны и отправляет напоминания"""
+        """Проверяет личные дедлайны и отправляет напоминания"""
     try:
         session = db.Session()
         
