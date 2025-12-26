@@ -30,91 +30,91 @@ class DeadlineReminder:
     
     async def check_personal_deadlines(self):
         """Проверяет личные дедлайны и отправляет напоминания"""
-    try:
-        session = db.Session()
-        
-        # Личные дедлайны, которые еще не выполнены
-        deadlines = session.query(db.Deadline).filter(
-            db.Deadline.is_completed == False
-        ).all()
-        
-        logger.info(f"🔍 Найдено {len(deadlines)} активных личных дедлайнов")
-        
-        for deadline in deadlines:
-            user = session.query(db.User).filter(db.User.id == deadline.user_id).first()
-            if not user:
-                continue
+        try:
+            session = db.Session()
             
-            # Используем TimeManager для проверки напоминаний
-            if TimeManager.is_in_reminder_window(deadline.deadline, "week"):
-                if user.notify_week and not deadline.reminded_week:
-                    await self.send_personal_reminder(user.telegram_id, deadline, "неделю")
-                    deadline.reminded_week = True
-                    session.commit()
-            
-            elif TimeManager.is_in_reminder_window(deadline.deadline, "day"):
-                if user.notify_day and not deadline.reminded_day:
-                    await self.send_personal_reminder(user.telegram_id, deadline, "день")
-                    deadline.reminded_day = True
-                    session.commit()
-            
-        session.close()
-        
-    except Exception as e:
-        logger.error(f"Ошибка при проверке личных дедлайнов: {e}", exc_info=True)
-
-async def check_group_deadlines(self):
-    """Проверяет групповые дедлайны и отправляет напоминания"""
-    try:
-        session = db.Session()
-        
-        deadlines = session.query(db.GroupDeadline).all()
-        logger.info(f"Найдено {len(deadlines)} групповых дедлайнов")
-        
-        for deadline in deadlines:
-            users = session.query(db.User).filter(
-                db.User.group_name == deadline.group_name
+            # Личные дедлайны, которые еще не выполнены
+            deadlines = session.query(db.Deadline).filter(
+                db.Deadline.is_completed == False
             ).all()
             
-            if not users:
-                continue
+            logger.info(f"🔍 Найдено {len(deadlines)} активных личных дедлайнов")
             
-            # Проверяем каждое напоминание только один раз для дедлайна
-            for reminder_type in ["week", "day"]:  # Убрали "hour"
-                if TimeManager.is_in_reminder_window(deadline.deadline, reminder_type):
-                    # Получаем соответствующее поле флага
-                    flag_field = f"reminded_{reminder_type}"
-                    
-                    # Проверяем, не отправляли ли уже это напоминание
-                    if not getattr(deadline, flag_field):
-                        # Отправляем всем пользователям группы
-                        for user in users:
-                            if getattr(user, f"notify_{reminder_type}"):
-                                await self.send_group_reminder(user.telegram_id, deadline, reminder_type)
-                        
-                        # Обновляем флаг
-                        setattr(deadline, flag_field, True)
+            for deadline in deadlines:
+                user = session.query(db.User).filter(db.User.id == deadline.user_id).first()
+                if not user:
+                    continue
+                
+                # Используем TimeManager для проверки напоминаний
+                if TimeManager.is_in_reminder_window(deadline.deadline, "week"):
+                    if user.notify_week and not deadline.reminded_week:
+                        await self.send_personal_reminder(user.telegram_id, deadline, "неделю")
+                        deadline.reminded_week = True
                         session.commit()
-                        break  # Переходим к следующему дедлайну
-        
-        session.close()
-        
-    except Exception as e:
-        logger.error(f"Ошибка при проверке групповых дедлайнов: {e}", exc_info=True)
+                
+                elif TimeManager.is_in_reminder_window(deadline.deadline, "day"):
+                    if user.notify_day and not deadline.reminded_day:
+                        await self.send_personal_reminder(user.telegram_id, deadline, "день")
+                        deadline.reminded_day = True
+                        session.commit()
+                    
+            session.close()
+            
+        except Exception as e:
+            logger.error(f"Ошибка при проверке личных дедлайнов: {e}", exc_info=True)
 
-def _format_reminder_message(self, deadline, deadline_moscow, time_left, time_unit, is_personal):
-    """Форматирует сообщение напоминания"""
-    # Определяем срочность
-    urgency_map = {
-        "день": ("⚠️", "Завтра дедлайн!"),
-        "неделю": ("🔔", "Напоминание")
-    }
-    
-    emoji, urgency = urgency_map.get(time_unit, ("🔔", "Напоминание"))
-    time_left_str = TimeManager.format_time_left(time_left)
-    
-    if is_personal:
-        message = f"""{emoji} **{urgency}**
+    async def check_group_deadlines(self):
+        """Проверяет групповые дедлайны и отправляет напоминания"""
+        try:
+            session = db.Session()
+            
+            deadlines = session.query(db.GroupDeadline).all()
+            logger.info(f"Найдено {len(deadlines)} групповых дедлайнов")
+            
+            for deadline in deadlines:
+                users = session.query(db.User).filter(
+                    db.User.group_name == deadline.group_name
+                ).all()
+                
+                if not users:
+                    continue
+                
+                # Проверяем каждое напоминание только один раз для дедлайна
+                for reminder_type in ["week", "day"]:  # Убрали "hour"
+                    if TimeManager.is_in_reminder_window(deadline.deadline, reminder_type):
+                        # Получаем соответствующее поле флага
+                        flag_field = f"reminded_{reminder_type}"
+                        
+                        # Проверяем, не отправляли ли уже это напоминание
+                        if not getattr(deadline, flag_field):
+                            # Отправляем всем пользователям группы
+                            for user in users:
+                                if getattr(user, f"notify_{reminder_type}"):
+                                    await self.send_group_reminder(user.telegram_id, deadline, reminder_type)
+                            
+                            # Обновляем флаг
+                            setattr(deadline, flag_field, True)
+                            session.commit()
+                            break  # Переходим к следующему дедлайну
+            
+            session.close()
+            
+        except Exception as e:
+            logger.error(f"Ошибка при проверке групповых дедлайнов: {e}", exc_info=True)
+
+    def _format_reminder_message(self, deadline, deadline_moscow, time_left, time_unit, is_personal):
+        """Форматирует сообщение напоминания"""
+        # Определяем срочность
+        urgency_map = {
+            "день": ("⚠️", "Завтра дедлайн!"),
+            "неделю": ("🔔", "Напоминание")
+        }
+        
+        emoji, urgency = urgency_map.get(time_unit, ("🔔", "Напоминание"))
+        time_left_str = TimeManager.format_time_left(time_left)
+        
+        if is_personal:
+            message = f"""{emoji} **{urgency}**
 
 До твоего дедлайна осталось **{time_left_str}**!
 
@@ -126,9 +126,9 @@ def _format_reminder_message(self, deadline, deadline_moscow, time_left, time_un
 
 Не забудь выполнить задание вовремя! 💪
 """
-    else:
-        importance = "⚠️ **ВАЖНЫЙ ДЛЯ ВСЕЙ ГРУППЫ**\n" if deadline.is_important else ""
-        message = f"""{emoji} **{urgency}**
+        else:
+            importance = "⚠️ **ВАЖНЫЙ ДЛЯ ВСЕЙ ГРУППЫ**\n" if deadline.is_important else ""
+            message = f"""{emoji} **{urgency}**
 {importance}
 До группового дедлайна осталось **{time_left_str}**!
 
@@ -141,7 +141,7 @@ def _format_reminder_message(self, deadline, deadline_moscow, time_left, time_un
 
 Не забудьте скоординироваться с группой! 👨‍👩‍👧‍👦
 """
-    return message
+        return message
 
     async def send_personal_reminder(self, user_id, deadline, time_unit):
         """Отправляет напоминание о личном дедлайне"""
@@ -204,26 +204,26 @@ def _format_reminder_message(self, deadline, deadline_moscow, time_left, time_un
 
 # ========== УТИЛИТЫ ==========
 
-    async def setup_reminder_job(application):
-        """
-        Настраивает периодическую задачу для проверки напоминаний
-        """
-        from telegram.ext import JobQueue
-        
-        # Создаем экземпляр менеджера напоминаний
-        reminder = DeadlineReminder(application.bot)
-        
-        # Запускаем задачу каждые 6 часов (21600 секунд)
-        job_queue = application.job_queue
-        job_queue.run_repeating(
-            callback=reminder.check_and_send_reminders,
-            interval=21600,  # 6 часов в секундах
-            first=10         # Первый запуск через 10 секунд
-        )
-        
-        logger.info("✅ Планировщик напоминаний запущен (интервал: 6 часов)")
-        
-        return reminder
+async def setup_reminder_job(application):
+    """
+    Настраивает периодическую задачу для проверки напоминаний
+    """
+    from telegram.ext import JobQueue
+    
+    # Создаем экземпляр менеджера напоминаний
+    reminder = DeadlineReminder(application.bot)
+    
+    # Запускаем задачу каждые 6 часов (21600 секунд)
+    job_queue = application.job_queue
+    job_queue.run_repeating(
+        callback=reminder.check_and_send_reminders,
+        interval=21600,  # 6 часов в секундах
+        first=10         # Первый запуск через 10 секунд
+    )
+    
+    logger.info("✅ Планировщик напоминаний запущен (интервал: 6 часов)")
+    
+    return reminder
 
 # ========== ТЕСТОВЫЕ ФУНКЦИИ ==========
 
