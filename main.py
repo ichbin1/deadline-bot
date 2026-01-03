@@ -1,13 +1,16 @@
 """
 main.py - Основной файл бота для отслеживания дедлайнов
 Поддерживает личные и групповые дедлайны для учебных групп
+Поддерживает как polling, так и вебхуки
 """
 
 import logging
 from datetime import datetime, timedelta
+import os
+import sys
 
 # Исправленные импорты для python-telegram-bot версии 20.x
-from telegram import Update
+from telegram import Update, Bot
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -25,6 +28,7 @@ import database as db
 import keyboards as kb
 import reminders
 import asyncio
+import pytz
 
 # ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
 
@@ -47,6 +51,129 @@ SET_GROUP = 9
 
 # Состояния для редактирования дедлайна
 EDIT_CHOICE, EDIT_VALUE = 10, 11
+
+# ========== ФУНКЦИИ ДЛЯ ВЕБХУКОВ ==========
+
+def create_bot_application():
+    """
+    Создает и настраивает приложение бота
+    Возвращает объект Application
+    """
+    # Создаем приложение
+    application = Application.builder().token(config.BOT_TOKEN).build()
+    
+    # ========== РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ ==========
+    
+    # Обработчики команд
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("cancel", cancel_command))
+    application.add_handler(CommandHandler("debug", debug_command))
+    application.add_handler(CommandHandler("debug_reminders", debug_reminders))
+    application.add_handler(CommandHandler("test_notification", test_notification_command))
+
+    # ConversationHandler для установки группы
+    group_conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler("setgroup", setgroup_command),
+            MessageHandler(filters.Regex('^✏️ Изменить группу$'), setgroup_command)
+        ],
+        states={
+            SET_GROUP: [MessageHandler(filters.TEXT & ~filters.Regex('^❌ Отмена$'), setgroup_input)]
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_command),
+            MessageHandler(filters.Regex('^❌ Отмена$'), cancel_command)
+        ]
+    )
+    application.add_handler(group_conv_handler)
+    
+    # ConversationHandler для добавления личного дедлайна
+    personal_conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex('^👤 Личный дедлайн$'), start_add_personal_deadline)
+        ],
+        states={
+            PERSONAL_SUBJECT: [
+                MessageHandler(
+                    filters.TEXT & ~filters.Regex('^(❌ Отмена|⬅️ Назад)$') & ~filters.COMMAND, 
+                    get_personal_subject
+                )
+            ],
+            PERSONAL_TASK: [
+                MessageHandler(
+                    filters.TEXT & ~filters.Regex('^(❌ Отмена|⬅️ Назад)$') & ~filters.COMMAND, 
+                    get_personal_task
+                )
+            ],
+            PERSONAL_DATE: [
+                MessageHandler(
+                    filters.TEXT & ~filters.Regex('^(❌ Отмена|⬅️ Назад)$') & ~filters.COMMAND, 
+                    get_personal_date
+                )
+            ],
+            PERSONAL_PRIORITY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_personal_priority)
+            ],
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_command),
+            MessageHandler(filters.Regex('^(❌ Отмена|⬅️ Назад)$'), cancel_command)
+        ]
+    )
+    application.add_handler(personal_conv_handler)
+    
+    # ConversationHandler для добавления группового дедлайна
+    group_deadline_conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex('^👥 Групповой дедлайн$'), start_add_group_deadline)
+        ],
+        states={
+            GROUP_SUBJECT: [
+                MessageHandler(
+                    filters.TEXT & ~filters.Regex('^(❌ Отмена|⬅️ Назад)$') & ~filters.COMMAND, 
+                    get_group_subject
+                )
+            ],
+            GROUP_TASK: [
+                MessageHandler(
+                    filters.TEXT & ~filters.Regex('^(❌ Отмена|⬅️ Назад)$') & ~filters.COMMAND, 
+                    get_group_task
+                )
+            ],
+            GROUP_DATE: [
+                MessageHandler(
+                    filters.TEXT & ~filters.Regex('^(❌ Отмена|⬅️ Назад)$') & ~filters.COMMAND, 
+                    get_group_date
+                )
+            ],
+            GROUP_CATEGORY: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_group_category)
+            ],
+            GROUP_IMPORTANCE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_group_importance)
+            ],
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_command),
+            MessageHandler(filters.Regex('^(❌ Отмена|⬅️ Назад)$'), cancel_command)
+        ]
+    )
+    application.add_handler(group_deadline_conv_handler)
+    
+    # Обработчик кнопок главного меню
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu)
+    )
+    
+    # Обработчик инлайн-кнопок
+    application.add_handler(CallbackQueryHandler(handle_callback_query))
+    
+    # Обработчик ошибок
+    application.add_error_handler(error_handler)
+    
+    logger.info("✅ Приложение бота создано и настроено")
+    return application
 
 # ========== СПРАВОЧНЫЕ ФУНКЦИИ ==========
 
@@ -103,10 +230,20 @@ def calculate_time_left(deadline_date):
     Возвращает строку вида "3 дня 5 часов"
     """
     now = datetime.now()
-    if deadline_date < now:
+    
+    # Если deadline_date наивное, конвертируем в московское
+    if deadline_date.tzinfo is None:
+        # Предполагаем, что это время из БД в UTC
+        deadline_date = pytz.UTC.localize(deadline_date).astimezone(MOSCOW_TZ)
+    else:
+        deadline_date = deadline_date.astimezone(MOSCOW_TZ)
+    
+    now_moscow = datetime.now(MOSCOW_TZ)
+    
+    if deadline_date < now_moscow:
         return "ПРОСРОЧЕНО"
     
-    delta = deadline_date - now
+    delta = deadline_date - now_moscow
     days = delta.days
     hours = delta.seconds // 3600
     minutes = (delta.seconds % 3600) // 60
@@ -1395,44 +1532,39 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """
-    Основная функция запуска бота
+    Основная функция запуска бота в режиме polling
     """
     # Создаем приложение
-    application = Application.builder().token(config.BOT_TOKEN).build()
+    application = create_bot_application()
     
-    # Настраиваем систему напоминаний
-    from reminders import DeadlineReminder
+    # Создаем новый event loop и запускаем настройку напоминаний
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     
-    reminder_manager = DeadlineReminder(application.bot)
-    
-    job_queue = application.job_queue
-    
-    # ПРОСТОЙ callback без оберток
-    async def check_reminders_job(context):
-        try:
-            logger.info("⏰ Запуск периодической проверки напоминаний...")
-            await reminder_manager.check_and_send_reminders()
-        except Exception as e:
-            logger.error(f"❌ Ошибка в задании проверки напоминаний: {e}")
-    
-    # Запускаем проверку каждую минуту
-    job_queue.run_repeating(
-        callback=check_reminders_job,
-        interval=21600,  # 60 секунд = 1 минута
-        first=10       # Первый запуск через 10 секунд
-    )
-    
-    logger.info("✅ Планировщик напоминаний запущен (интервал: 6 часов)")
+    try:
+        # Запускаем настройку напоминаний
+        loop.run_until_complete(setup_reminder_job(application))
+        
+        logger.info("Бот запускается в режиме polling...")
+        
+        # Запускаем бота в режиме polling
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True
+        )
+    finally:
+        loop.close()
     
     
     # ========== РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ ==========
     
-    # Обработчики команд
+     # Обработчики команд
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CommandHandler("debug", debug_command))
     application.add_handler(CommandHandler("debug_reminders", debug_reminders))
+    application.add_handler(CommandHandler("test_notification", test_notification_command))
 
     # ConversationHandler для установки группы
     group_conv_handler = ConversationHandler(
@@ -1522,8 +1654,6 @@ def main():
         ]
     )
     application.add_handler(group_deadline_conv_handler)
-
-
     
     # Обработчик кнопок главного меню
     application.add_handler(
@@ -1536,23 +1666,105 @@ def main():
     # Обработчик ошибок
     application.add_error_handler(error_handler)
     
+    logger.info("✅ Приложение бота создано и настроено")
+    return application
+
+def init_reminder_manager(bot):
+    """
+    Инициализирует менеджер напоминаний
+    """
+    from reminders import DeadlineReminder
+    return DeadlineReminder(bot)
+
+def setup_webhook(webhook_url):
+    """
+    Устанавливает вебхук для бота
+    """
+    try:
+        bot = Bot(token=config.BOT_TOKEN)
+        
+        # Устанавливаем вебхук
+        bot.set_webhook(
+            url=f"{webhook_url}/{config.BOT_TOKEN}",
+            allowed_updates=["message", "callback_query"]
+        )
+        
+        logger.info(f"✅ Вебхук установлен на {webhook_url}/{config.BOT_TOKEN}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка установки вебхука: {e}")
+        return False
+
+async def setup_reminder_job(application):
+    """
+    Настраивает периодическую задачу для проверки напоминаний
+    """
+    from reminders import DeadlineReminder
+    
+    reminder_manager = DeadlineReminder(application.bot)
+    
+    job_queue = application.job_queue
+    
+    async def check_reminders_job(context):
+        try:
+            logger.info("⏰ Запуск периодической проверки напоминаний...")
+            await reminder_manager.check_and_send_reminders()
+        except Exception as e:
+            logger.error(f"❌ Ошибка в задании проверки напоминаний: {e}")
+    
+    # Запускаем проверку каждые 6 часов (21600 секунд)
+    job_queue.run_repeating(
+        callback=check_reminders_job,
+        interval=21600,  # 6 часов
+        first=10         # Первый запуск через 10 секунд
+    )
+    
+    logger.info("✅ Планировщик напоминаний запущен (интервал: 6 часов)")
+    return reminder_manager
+
+def test_reminder_function(user_id):
+    """
+    Функция для тестирования напоминаний
+    """
+    try:
+        # Создаем тестовый дедлайн
+        from datetime import datetime, timedelta
+        
+        test_time = datetime.now() + timedelta(minutes=16)
+        
+        deadline_id = db.add_personal_deadline(
+            user_id,
+            "ТЕСТ ВЕБХУКА",
+            "Проверка работы через вебхуки",
+            test_time,
+            "Высокий"
+        )
+        
+        if deadline_id:
+            return {
+                'status': 'success',
+                'message': f'Тестовый дедлайн создан (ID: {deadline_id})',
+                'deadline_time': test_time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+        else:
+            return {'status': 'error', 'message': 'Не удалось создать дедлайн'}
+            
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+    
     # ========== ЗАПУСК БОТА ==========
     
-    logger.info("Бот запускается...")
-    
-    # Запускаем бота в режиме polling
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+   
 
 # ========== ТОЧКА ВХОДА ==========
 
-import os
-
 if __name__ == "__main__":
-    # Для локального тестирования
-    if os.environ.get('PYTHONANYWHERE'):
-        # Для продакшена - просто запускаем
-        application.run_polling()
+    # Проверяем режим запуска
+    if os.environ.get('USE_WEBHOOKS', 'false').lower() == 'true':
+        print("ℹ️ Для работы через вебхуки используйте: python webapp.py")
+        print("или установите переменную окружения USE_WEBHOOKS=false для polling")
     else:
-        # Локально - с логированием
-        print("🚀 Бот запускается локально...")
+        # Локально - запускаем polling
+        print("🚀 Бот запускается локально в режиме polling...")
         main()
