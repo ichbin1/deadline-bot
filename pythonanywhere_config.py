@@ -24,7 +24,7 @@ if not BOT_TOKEN:
     )
 
 # Настройки базы данных (используем SQLite)
-DATABASE_URL = "sqlite:////home/ваш_логин/папка_с_ботом/deadlines.db"  # ЗАМЕНИТЕ ПУТЬ!
+DATABASE_URL = "sqlite:////home/Semenmind/deadline-bot/deadlines.db"  # ЗАМЕНИТЕ ПУТЬ!
 
 # Часовой пояс
 TIMEZONE = "Europe/Moscow"

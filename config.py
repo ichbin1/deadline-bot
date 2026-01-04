@@ -43,7 +43,7 @@ if not BOT_TOKEN:
 # Настройки базы данных
 if PYTHONANYWHERE:
     # На PythonAnywhere используем абсолютный путь
-    DATABASE_URL = "sqlite:////home/ваш_логин/папка_с_ботом/deadlines.db"  # ЗАМЕНИТЕ!
+    DATABASE_URL = "sqlite:////home/Semenmind/deadline-bot/deadlines.db"  # ЗАМЕНИТЕ!
 else:
     DATABASE_URL = "sqlite:///deadlines.db"  # Локально
 

@@ -6,7 +6,7 @@ import sys
 import os
 
 # Добавляем путь к проекту
-path = '/home/ваш_логин/папка_с_ботом'  # ЗАМЕНИТЕ НА СВОЙ ПУТЬ!
+path = '/home/Semenmind/deadline-bot'  # ЗАМЕНИТЕ НА СВОЙ ПУТЬ!
 if path not in sys.path:
     sys.path.append(path)
 
